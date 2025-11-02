@@ -83,9 +83,6 @@ jobs:
             COMMAND+=" -k $KEY"
           fi
           
-          # Safety flags
-          COMMAND+=" -t 1 -i 1" 
-          
           echo "::set-output name=command::$COMMAND"
 
       - name: Run apgluxe Search (Grouped Execution)
