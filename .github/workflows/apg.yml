@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       search_rule:
-        description: 'Conway''s Life Rule (e.g., b3s23)' # Fixed the extra quote here
+        description: 'Conway''s Life Rule (e.g., b3s23)'
         required: true
         default: 'b3s23'
       symmetry:
@@ -30,30 +30,24 @@ on:
 
 jobs:
   search:
-    # The search requires x86-64 architecture, which standard GitHub runners provide.
     runs-on: ubuntu-latest
     
     steps:
-      - name: Install Git
+      - name: Install Git and Build Tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y git
+          sudo apt-get install -y git build-essential
 
       - name: Clone apgluxe Repository from GitLab
         run: |
-          # Clone the source repository directly from GitLab as per instructions
+          # Clone the source repository directly from GitLab
           git clone https://gitlab.com/apgoucher/apgmera.git
+          # Change directory ONCE to the source folder
           cd apgmera
 
-      - name: Install Dependencies (Build Essentials)
-        run: |
-          # Install necessary tools like make and gcc/g++
-          sudo apt-get update
-          sudo apt-get install -y build-essential
-          
       - name: Compile apgluxe
         run: |
-          # We are already in the apgmera directory from the previous step
+          # Since we are already in the 'apgmera' directory, we execute locally
           ./recompile.sh
         
       - name: Verify Compilation Output
@@ -70,7 +64,7 @@ jobs:
       - name: Construct apgluxe Run Command
         id: build_command
         run: |
-          # Command needs to be run from within the apgmera directory
+          # The command is built expecting to run from within the 'apgmera' directory
           COMMAND="./apgluxe"
           
           # 1. Add rule and symmetry
@@ -98,7 +92,7 @@ jobs:
           echo "::set-output name=command::$COMMAND"
 
       - name: Run apgluxe Search
-        # Run the command from inside the apgmera directory
+        # Run the command from inside the 'apgmera' directory
         run: |
           cd apgmera
           echo "Executing command: ${{ steps.build_command.outputs.command }}"
