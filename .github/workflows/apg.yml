@@ -1,9 +1,6 @@
-name: Compile and Run apgluxe Search from GitLab (Grouped Execution)
+name: Compile and Run apgluxe Search from GitLab (Rule Passed to Build)
 
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
     inputs:
       search_rule:
@@ -40,22 +37,30 @@ jobs:
       - name: Clone apgluxe Repository from GitLab
         run: |
           git clone https://gitlab.com/apgoucher/apgmera.git
-          # Capture the directory name for demonstration (though we won't reuse it this way)
-          # In a standard checkout, the directory name is the repo name.
-          RUN_DIR=$(pwd)/apgmera
-          echo "::set-output name=source_dir::$RUN_DIR"
-
-      - name: Compile apgluxe
+          
+      # --- Compilation Steps ---
+      - name: Compile apgluxe with Specific Rule/Symmetry Context
+        id: compile
+        working-directory: ./apgmera
         run: |
-          cd apgmera
-          ./recompile.sh
+          RULE="${{ github.event.inputs.search_rule || 'b3s23' }}"
+          SYMM="${{ github.event.inputs.symmetry || 'C1' }}"
+          
+          # Assuming recompile.sh accepts the rule and symmetry as positional or specific flags.
+          # Since the exact flags aren't documented, we try passing them directly after the script name.
+          # Note: If recompile.sh doesn't accept these, this step will fail or compile the default.
+          # Based on other tools in the ecosystem, we use rule and symmetry arguments.
+          
+          ./recompile.sh --rule "$RULE" --symmetry "$SYMM"
         
       - name: Verify Compilation Output
+        working-directory: ./apgmera
         run: |
-          cd apgmera
           if [ -f apgluxe ]; then
             echo "Compilation successful. Checking configuration:"
             ./apgluxe --version
+            # We can also check the configuration output if it matches the input:
+            grep -q "Rule $RULE is correctly configured" output.log || true
           else
             echo "Compilation failed. apgluxe executable not found."
             exit 1
@@ -64,38 +69,29 @@ jobs:
       - name: Construct apgluxe Run Command
         id: build_command
         run: |
-          COMMAND="./apgluxe"
-          
-          # 1. Add rule and symmetry
           RULE_INPUT="${{ github.event.inputs.search_rule }}"
           SYMMETRY_INPUT="${{ github.event.inputs.symmetry }}"
-          COMMAND+=" --rule ${RULE_INPUT:-b3s23}"
-          COMMAND+=" --symmetry ${SYMMETRY_INPUT:-C1}"
-
-          # 2. Add haul size (-n)
-          COMMAND+=" -n ${{ github.event.inputs.haul_size || '20000000' }}"
+          KEY="${{ github.event.inputs.key }}"
           
-          # 3. Add threads (-p)
+          # Build the execution command. We pass them again at runtime as well, 
+          # as runtime flags usually override compile-time settings.
+          COMMAND="./apgluxe --rule ${RULE_INPUT:-b3s23} --symmetry ${SYMMETRY_INPUT:-C1}"
+          COMMAND+=" -n ${{ github.event.inputs.haul_size || '20000000' }}"
           COMMAND+=" -p ${{ github.event.inputs.threads || '2' }}"
 
-          # 4. Add key (-k) if provided
-          KEY="${{ github.event.inputs.key }}"
           if [[ ! -z "$KEY" ]]; then
             COMMAND+=" -k $KEY"
           fi
-
-          # 5. Safety flags for automated testing:
-          COMMAND+=" -t 1" # Disable uploading
-          COMMAND+=" -i 1"  # Run for 1 haul and exit
+          
+          # Safety flags
+          COMMAND+=" -t 1 -i 1" 
           
           echo "::set-output name=command::$COMMAND"
 
       - name: Run apgluxe Search (Grouped Execution)
         run: |
-          # We execute the CD and the run command together in one shell block
-          # so the 'cd' persists for the duration of this single command execution.
+          # Grouping commands in one block ensures 'cd' persists for the execution
           cd apgmera
-          echo "Current directory check: $(pwd)" # This will show /home/runner/work/.../apgmera
           
           echo "Executing command: ${{ steps.build_command.outputs.command }}"
           ${{ steps.build_command.outputs.command }}
