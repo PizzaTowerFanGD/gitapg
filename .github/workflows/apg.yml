@@ -1,6 +1,5 @@
-name: Compile and Run apgluxe Search from GitLab
+name: Compile and Run apgluxe Search from GitLab (Grouped Execution)
 
-# Trigger the workflow on pushes to the main branch or manually
 on:
   push:
     branches:
@@ -40,19 +39,20 @@ jobs:
 
       - name: Clone apgluxe Repository from GitLab
         run: |
-          # Clone the source repository directly from GitLab
           git clone https://gitlab.com/apgoucher/apgmera.git
-          # Change directory ONCE to the source folder
-          cd apgmera
+          # Capture the directory name for demonstration (though we won't reuse it this way)
+          # In a standard checkout, the directory name is the repo name.
+          RUN_DIR=$(pwd)/apgmera
+          echo "::set-output name=source_dir::$RUN_DIR"
 
       - name: Compile apgluxe
         run: |
-          # Since we are already in the 'apgmera' directory, we execute locally
+          cd apgmera
           ./recompile.sh
         
       - name: Verify Compilation Output
         run: |
-          # Check for the executable and configuration success
+          cd apgmera
           if [ -f apgluxe ]; then
             echo "Compilation successful. Checking configuration:"
             ./apgluxe --version
@@ -64,7 +64,6 @@ jobs:
       - name: Construct apgluxe Run Command
         id: build_command
         run: |
-          # The command is built expecting to run from within the 'apgmera' directory
           COMMAND="./apgluxe"
           
           # 1. Add rule and symmetry
@@ -91,9 +90,12 @@ jobs:
           
           echo "::set-output name=command::$COMMAND"
 
-      - name: Run apgluxe Search
-        # Run the command from inside the 'apgmera' directory
+      - name: Run apgluxe Search (Grouped Execution)
         run: |
+          # We execute the CD and the run command together in one shell block
+          # so the 'cd' persists for the duration of this single command execution.
           cd apgmera
+          echo "Current directory check: $(pwd)" # This will show /home/runner/work/.../apgmera
+          
           echo "Executing command: ${{ steps.build_command.outputs.command }}"
           ${{ steps.build_command.outputs.command }}
