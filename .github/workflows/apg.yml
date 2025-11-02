@@ -1,0 +1,103 @@
+name: Compile and Run apgluxe Search
+
+# Trigger the workflow on pushes to the main branch or manually
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      search_rule:
+        description: 'Conways Life Rule (e.g., b3s23)'
+        required: true
+        default: 'b3s23'
+      symmetry:
+        description: 'Symmetry configuration (e.g., C1, D2_+1)'
+        required: true
+        default: 'C1'
+      key:
+        description: 'Your payosha256 key for uploading results (optional)'
+        required: false
+        default: ''
+      haul_size:
+        description: 'Number of soups per upload (-n)'
+        required: true
+        default: '20000000'
+      threads:
+        description: 'Number of threads to use (-p)'
+        required: true
+        default: '2' # Use 2 threads as a safe default for standard runners
+
+jobs:
+  search:
+    # The search requires x86-64 architecture, which standard GitHub runners provide.
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout apgluxe Repository
+        uses: actions/checkout@v4
+        with:
+          # Cloning the specific repository mentioned in the instructions
+          repository: 'apgoucher/apgmera'
+
+      - name: Install Dependencies (Build Essentials)
+        run: |
+          # Install necessary tools like git, make, and gcc/g++
+          sudo apt-get update
+          sudo apt-get install -y build-essential git
+
+      - name: Compile apgluxe
+        run: |
+          # Navigate to the directory and run the standard compilation script
+          cd apgmera
+          ./recompile.sh
+        
+      - name: Verify Compilation Output
+        run: |
+          # Check if the expected verification lines are present
+          if grep -q "apgluxe v.* is correctly configured" apgmera/apgluxe; then
+            echo "Compilation successful."
+            ./apgluxe --version
+          else
+            echo "Compilation verification failed. Check output above."
+            exit 1
+          fi
+
+      - name: Construct apgluxe Run Command
+        id: build_command
+        run: |
+          REPO_DIR="apgluxe/apgmera" # Assuming compilation happens inside the repo root
+          COMMAND="./apgluxe"
+          
+          # 1. Add rule and symmetry
+          COMMAND+=" --rule ${{ github.event.inputs.search_rule || 'b3s23' }}"
+          COMMAND+=" --symmetry ${{ github.event.inputs.symmetry || 'C1' }}"
+
+          # 2. Add haul size (-n)
+          COMMAND+=" -n ${{ github.event.inputs.haul_size || '20000000' }}"
+          
+          # 3. Add threads (-p) - Note: This might fail on Cygwin, but standard Ubuntu is fine.
+          COMMAND+=" -p ${{ github.event.inputs.threads || '2' }}"
+
+          # 4. Add key (-k) if provided
+          KEY="${{ github.event.inputs.key }}"
+          if [[ ! -z "$KEY" ]]; then
+            COMMAND+=" -k $KEY"
+          fi
+
+          # 5. Example: Disable uploading to Catagolue locally for testing/safety (-t 1)
+          # Remove '-t 1' if you intend to truly contribute results.
+          COMMAND+=" -t 1" 
+          
+          # 6. Example: Run for a limited number of hauls for the test (-i 1)
+          # Remove '-i 1' if you want it to run indefinitely (until the workflow times out)
+          COMMAND+=" -i 1" 
+
+          echo "::set-output name=command::$COMMAND"
+
+      - name: Run apgluxe Search
+        # Run the constructed command from the directory where apgluxe executable is located
+        run: |
+          cd apgmera
+          echo "Executing command: ${{ steps.build_command.outputs.command }}"
+          ${{ steps.build_command.outputs.command }}
